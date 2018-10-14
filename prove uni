@@ -1,0 +1,83 @@
+import os
+import csv
+import numpy as np
+import pandas as pd
+from pandas import DataFrame
+
+os.chdir(r'/Users/chenkf/Book/Textbooks/Courses/UMSI/SI 601&618/project data')
+
+
+uni_ranking=pd.read_table('timesData.csv',sep=',',thousands=',')
+uni_ranking = uni_ranking.loc[:,['world_rank','country','teaching','international','research','citations','income','total_score','num_students','international_students','year']]
+uni_ranking = uni_ranking.loc[~uni_ranking['country'].isin(['Taiwan'])]
+uni_ranking.ix[uni_ranking['country']=='Macau','country'] = 'China'
+uni_ranking.loc[uni_ranking.country=='South Korea','country'] = 'Korea, South'
+uni_ranking.loc[uni_ranking.country=='Republic of Ireland','country'] = 'Ireland'
+uni_ranking.world_rank = pd.to_numeric(uni_ranking.world_rank,errors='coerce')
+uni_ranking.teaching = pd.to_numeric(uni_ranking.teaching,errors='coerce')
+uni_ranking.international = pd.to_numeric(uni_ranking.international,errors='coerce')
+uni_ranking.research = pd.to_numeric(uni_ranking.research,errors='coerce')
+uni_ranking.citations = pd.to_numeric(uni_ranking.citations,errors='coerce')
+uni_ranking.income = pd.to_numeric(uni_ranking.income,errors='coerce')
+uni_ranking.total_score = pd.to_numeric(uni_ranking.total_score,errors='coerce')
+uni_ranking.num_students = pd.to_numeric(uni_ranking.num_students,errors='coerce')
+uni_ranking.international_students = uni_ranking.international_students.replace('%','',regex=True).astype('float')/100
+
+
+continent = pd.read_table('Countries-Continents-csv.csv',sep=',')
+continent.rename(columns={'Continent': 'continent', 'Country': 'country'}, inplace=True)
+
+
+gdp = pd.read_excel('GDPDatabase-AllData.xlsx',sheetname='GDP-PPP Data')
+gdp = gdp.loc[:,['Country',2015]]
+gdp.rename(columns={'Continent': 'continent', 'Country': 'country'}, inplace=True)
+gdp.country = [x.encode('utf-8') for x in gdp['country']]
+gdp.loc[gdp.country=='Russia','country'] = 'Russian Federation'
+
+
+uni_ranking_top200_2016 = uni_ranking.ix[uni_ranking.year==2016,:][:200].drop('year',1)
+
+
+aggregation = {'total_score':{
+         'num_universities': 'count',
+         'mean':'mean'
+     },'teaching':'mean'
+      ,'international':'mean'
+      ,'research':'mean'
+      ,'citations':'mean'
+      ,'income':'mean'
+      ,'num_students':'mean'
+      ,'international_students':'mean'
+}
+a = uni_ranking_top200_2016.groupby(by='country').agg(aggregation).sort(columns=[('total_score','num_universities'),('total_score','mean')],ascending=[False,False])
+a.reset_index(level=0, inplace=True)
+
+
+dt = a.merge(continent,on='country',how='left').drop(('country',''),1)
+dt.ix[dt.ix[:,0]=='Hong Kong','continent'] = 'Asia'
+
+
+dt2 = dt.merge(gdp[['country',2015]],on='country',how='left')
+dt2.columns = ['_'.join(col) if isinstance (col,tuple) else col for col in dt2.columns.values]
+dt2.rename(columns={2015: '2015 GDP'}, inplace=True)
+dt2.to_csv('uni_by_country.csv')
+
+
+aggregations2={'total_score_mean':'mean',
+               'total_score_num_universities':'sum',
+               'research_mean':'mean',
+               'international_students_mean':'mean',
+               'citations_mean':'mean',
+               'income_mean':'mean',
+               'teaching_mean':'mean',
+               'num_students_mean':'mean',
+               'international_students_mean':'mean',
+               '2015 GDP':'mean'
+    
+}
+b = dt2.groupby(by='continent').agg(aggregations2).sort(columns=['total_score_num_universities'],ascending=False)
+b.to_csv('uni_by_continent.csv')
+
+
+correlation = b.corr().ix[:,'2015 GDP']
+correlation.to_csv('uni_by_continent_correlation.csv')
